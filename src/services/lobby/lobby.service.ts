@@ -40,12 +40,8 @@ export class LobbyService implements OnGatewayConnection<Socket> {
   }
 
   @SubscribeMessage('joinLobby')
-  public connectSocketToLobby(client: Socket, _data: string) {
-    const { id } = JSON.parse(_data) as JoinLobbyData;
-
-    this.getLobbyById(id).joinLobby(client);
-
-    return id;
+  public connectSocketToLobby(client: Socket, { id, player }: JoinLobbyData) {
+    return this.getLobbyById(id).join(client, player);
   }
 
   @SubscribeMessage('fire')
