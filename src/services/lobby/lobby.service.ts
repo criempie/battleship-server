@@ -13,9 +13,12 @@ import {
   socketSettings,
   TurnData,
   FireData,
-  SocketFireAnswer,
+  ClientFireData,
+  serverLobbyEvents,
+  ServerFireData,
+  ClientJoinLobbyData,
+  ServerJoinLobbyData,
 } from '@battleship/common';
-import { DefaultEventsMap } from 'socket.io/dist/typed-events';
 
 @Injectable()
 @WebSocketGateway(80, {
@@ -35,32 +38,55 @@ export class LobbyService implements OnGatewayConnection<Socket> {
     this._logger.verbose(`socket ${client.id} has connected`);
   }
 
-  public getLobbyById(id: number) {
+  public getLobbyById(id: string) {
     return this._lobbies.find((l) => l.id === id);
   }
 
-  @SubscribeMessage('joinLobby')
-  public connectSocketToLobby(client: Socket, { id, player }: JoinLobbyData) {
-    return this.getLobbyById(id).join(client, player);
+  public createLobby() {
+    const lobby = new Lobby();
+    this._lobbies.push(lobby);
+
+    return lobby;
   }
 
-  @SubscribeMessage('fire')
-  public fire(client: Socket, _data: string): SocketFireAnswer {
-    const { coords, lobbyId } = JSON.parse(_data) as FireData;
+  @SubscribeMessage(serverLobbyEvents.joinLobby)
+  public connectSocketToLobby(
+    client: Socket,
+    { id, player }: ServerJoinLobbyData,
+  ): ClientJoinLobbyData | { success: false; reason?: string } {
+    const lobby = this.getLobbyById(id);
 
-    const result = this.getLobbyById(lobbyId).fire(client, coords);
+    if (lobby) {
+      try {
+        return lobby.join(client, player);
+      } catch (e) {
+        return { success: false, reason: e?.message };
+      }
+    } else {
+      return { success: false, reason: 'Лобби не найдено' };
+    }
+  }
 
-    if (result) {
-      this._logger.verbose(`fire state ${result} on ${JSON.stringify(coords)}`);
+  @SubscribeMessage(serverLobbyEvents.fire)
+  public fire(
+    client: Socket,
+    { coords, lobbyId }: ServerFireData,
+  ): ClientFireData {
+    const lobby = this.getLobbyById(lobbyId);
+
+    if (!lobby) {
       return {
-        success: true,
-        state: result,
-        target: coords,
-        isYourTurn: false,
+        success: false,
+        reason: 'Лобби не существует',
       };
     }
 
-    return { success: false };
+    try {
+      this.getLobbyById(lobbyId).fire(client, coords);
+      return { success: true };
+    } catch (e) {
+      return { success: false, reason: e?.message };
+    }
   }
 
   @SubscribeMessage('turn')

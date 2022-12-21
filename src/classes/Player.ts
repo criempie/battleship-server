@@ -1,7 +1,10 @@
 import { Player as Player_ } from '@battleship/common';
+import { process as generateIdByProcess } from 'uniqid';
+import { Field } from './Field';
 
 export class Player extends Player_ {
   private _status: 'online' | 'offline';
+  public field: Field;
 
   public get status() {
     return this._status;
@@ -16,10 +19,12 @@ export class Player extends Player_ {
     this._changeActualSocketId(id);
   }
 
-  constructor(socketId: string) {
-    const id = Math.ceil(performance.now());
+  constructor(socketId: string, field: Field) {
+    const id = generateIdByProcess();
     super(id, socketId);
+
     this._status = 'online';
+    this.field = field;
   }
 
   public isPreviousSocketId(socketId: string) {
