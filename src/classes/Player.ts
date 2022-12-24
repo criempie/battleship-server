@@ -1,10 +1,9 @@
-import { Player as Player_ } from '@battleship/common';
+import { CellState, Player as Player_ } from '@battleship/common';
 import { process as generateIdByProcess } from 'uniqid';
 import { Field } from './Field';
 
-export class Player extends Player_ {
+export class Player extends Player_<Field> {
   private _status: 'online' | 'offline';
-  public field: Field;
 
   public get status() {
     return this._status;
@@ -21,10 +20,9 @@ export class Player extends Player_ {
 
   constructor(socketId: string, field: Field) {
     const id = generateIdByProcess();
-    super(id, socketId);
+    super(id, socketId, field);
 
     this._status = 'online';
-    this.field = field;
   }
 
   public isPreviousSocketId(socketId: string) {
@@ -38,6 +36,10 @@ export class Player extends Player_ {
   public disconnect() {
     this._status = 'offline';
     this._changeActualSocketId(null);
+  }
+
+  public getMinifiedField(): CellState[][] {
+    return this.field.cells.map((row) => row.map((cell) => cell.state));
   }
 
   private _changeActualSocketId(newId: string | null) {

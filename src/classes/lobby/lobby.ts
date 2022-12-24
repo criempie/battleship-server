@@ -1,11 +1,15 @@
 import {
   CellState,
   ClientJoinLobbyData,
+  clientLobbyEvents,
   Coordinates,
   HistoryLog,
   JoinLobbyReturn,
+  LobbyLogTypes,
   PlayerInfo,
   ServerEventGameLog,
+  serverLobbyEvents,
+  ServerLobbyLogData,
   TurnData,
 } from '@battleship/common';
 import { Socket } from 'socket.io';
@@ -14,11 +18,6 @@ import { Field } from '../Field';
 import { CycleQueue } from '../CycleQueue';
 import { Player } from '../Player';
 import { time as generateIdByTime } from 'uniqid';
-
-interface LobbyField {
-  owner: Player['id'];
-  field: Field;
-}
 
 export class Lobby {
   private static _fieldSize = 10;
@@ -39,7 +38,10 @@ export class Lobby {
     this._logger.log('created');
   }
 
-  public join(socket: Socket, playerInfo?: PlayerInfo): ClientJoinLobbyData {
+  public join(
+    socket: Socket,
+    playerInfo?: Pick<PlayerInfo, 'id' | 'socketId'>,
+  ): ClientJoinLobbyData {
     let player = playerInfo
       ? this._players.find((p) => p.id === playerInfo.id)
       : null;
@@ -48,7 +50,7 @@ export class Lobby {
       throw new Error('Лобби заполнено');
     }
 
-    const isNewPlayer = !player;
+    let isNewPlayer = !player;
 
     socket.join(this.socketRoomName);
     socket.on('disconnect', this._onSocketDisconnect.bind(this, socket));
@@ -59,32 +61,44 @@ export class Lobby {
       player = new Player(socket.id, new Field(Lobby._fieldSize));
       this._players.push(player);
       this._turnQueue.add(player.id);
+      isNewPlayer = true;
     }
 
-    this._logger.log(`player ${player.id} connected`);
+    const otherPlayers = this._players
+      .filter((p) => p.id !== player.id)
+      .map((p) => ({
+        id: p.id,
+        field: p.getMinifiedField(),
+      }));
 
-    const result: ClientJoinLobbyData = {
+    const lobbyLog: ServerLobbyLogData = {
+      id: 1,
+      type: isNewPlayer ? LobbyLogTypes.playerJoin : LobbyLogTypes.playerRejoin,
+      playerId: player.id,
+    };
+
+    socket.to(this.socketRoomName).emit(serverLobbyEvents.lobbyLog, lobbyLog);
+
+    this._logger.log(
+      `player ${player.id} ${isNewPlayer ? 'joined' : 'rejoined'}`,
+    );
+
+    return {
       id: this.id,
       player: {
         id: player.id,
         socketId: player.socketId,
+        field: player.getMinifiedField(),
       },
+      otherPlayers,
     };
-
-    if (!isNewPlayer) {
-      result['fields'] = this._players.map((p) => ({
-        owner: p.id,
-        field: this._formatFieldToSend(p.field),
-      }));
-    }
-
-    return result;
   }
 
   public fire(socket: Socket, { x, y }: Coordinates) {
     this._logger.debug(`current turn for ${this._turnQueue.head}`);
 
     const player = this.getPlayerBySocketId(socket.id);
+    const opponent = this._players.find((p) => p.id === this._turnQueue.tail);
 
     if (!player) {
       throw new Error('Игрок не найден');
@@ -95,20 +109,19 @@ export class Lobby {
         throw new Error('Указанные координаты вне игрового поля');
       }
 
-      const fireResult = player.field.fire({ x, y });
-      if (!fireResult) throw new Error('Клетка не может быть подстрелена');
-
       const gameLog: ServerEventGameLog = {
         id: 1,
         fromPlayer: player.id,
         toPlayer: this._turnQueue.tail,
-        result: fireResult,
+        result: opponent.field.fire({ x, y }),
         target: { x, y },
       };
 
       this._turnQueue.next();
       this._logger.log(`${player?.id} success fire to {${x}, ${y}}}`);
-      socket.nsp.to(this.socketRoomName).emit('gameLog', gameLog);
+      socket.nsp
+        .to(this.socketRoomName)
+        .emit(serverLobbyEvents.gameLog, gameLog);
     } else {
       throw new Error('Не ваша очередь');
     }
@@ -118,14 +131,18 @@ export class Lobby {
     return this._players.find((p) => p.socketId === socketId);
   }
 
-  private _formatFieldToSend(field: Field): CellState[][] {
-    return field.cells.map((row) => row.map((cell) => cell.state));
-  }
-
   private _onSocketDisconnect(client: Socket, reason: string) {
     const player = this.getPlayerBySocketId(client.id);
     if (player) {
       player.disconnect();
+
+      const lobbyLog: ServerLobbyLogData = {
+        id: 1,
+        type: LobbyLogTypes.playerLeave,
+        playerId: player.id,
+      };
+
+      client.to(this.socketRoomName).emit(serverLobbyEvents.lobbyLog, lobbyLog);
       this._logger.log(`player ${player.id} disconnected`);
     }
   }

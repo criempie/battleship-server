@@ -1,30 +1,25 @@
-import { Coordinates } from '@battleship/common';
-import { Logger } from '@nestjs/common';
-import { Cell } from './Cell';
+import { CellState, Coordinates, Field as Field_ } from '@battleship/common';
 
-export class Field {
-  private _cells: Cell[][];
-  // private _ships: any[];
-
-  public get cells() {
-    return this._cells.slice();
-  }
-
+export class Field extends Field_ {
   constructor(size: number) {
-    this._cells = Field._generateCells(size);
+    super(size);
   }
 
-  public fire({ x, y }: Coordinates) {
-    return this._cells[x][y].fire();
-  }
+  public fire({ x, y }: Coordinates): CellState {
+    const currentState = this._cells[x][y].state;
 
-  public static _generateCells(size: number) {
-    return Array(size)
-      .fill(null)
-      .map((_, x) =>
-        Array(size)
-          .fill(null)
-          .map((_, y) => new Cell()),
-      );
+    switch (currentState) {
+      case CellState.clear: {
+        this._setStateToCell({ x, y }, CellState.miss);
+        return CellState.miss;
+      }
+      case CellState.ship: {
+        this._setStateToCell({ x, y }, CellState.hit);
+        return CellState.hit;
+      }
+      default: {
+        throw new Error('Огонь по уже стрелянной клетке');
+      }
+    }
   }
 }

@@ -14,7 +14,7 @@ import {
   TurnData,
   FireData,
   ClientFireData,
-  serverLobbyEvents,
+  clientLobbyEvents,
   ServerFireData,
   ClientJoinLobbyData,
   ServerJoinLobbyData,
@@ -49,7 +49,7 @@ export class LobbyService implements OnGatewayConnection<Socket> {
     return lobby;
   }
 
-  @SubscribeMessage(serverLobbyEvents.joinLobby)
+  @SubscribeMessage(clientLobbyEvents.joinLobby)
   public connectSocketToLobby(
     client: Socket,
     { id, player }: ServerJoinLobbyData,
@@ -67,7 +67,7 @@ export class LobbyService implements OnGatewayConnection<Socket> {
     }
   }
 
-  @SubscribeMessage(serverLobbyEvents.fire)
+  @SubscribeMessage(clientLobbyEvents.fire)
   public fire(
     client: Socket,
     { coords, lobbyId }: ServerFireData,
