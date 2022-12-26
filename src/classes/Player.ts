@@ -1,4 +1,8 @@
-import { CellState, Player as Player_ } from '@battleship/common';
+import {
+  CellState,
+  MinifiedField,
+  Player as Player_,
+} from '@battleship/common';
 import { process as generateIdByProcess } from 'uniqid';
 import { Field } from './Field';
 
@@ -38,8 +42,23 @@ export class Player extends Player_<Field> {
     this._changeActualSocketId(null);
   }
 
-  public getMinifiedField(): CellState[][] {
-    return this.field.cells.map((row) => row.map((cell) => cell.state));
+  public getMinifiedField(
+    additionStatesToSkip: CellState[] = [],
+  ): MinifiedField {
+    const statesToSkip = [CellState.clear, ...additionStatesToSkip];
+
+    return this.field.cells.flat(1).reduce<MinifiedField>((prev, curr) => {
+      if (!statesToSkip.includes(curr.state)) {
+        prev.push({
+          x: curr.x,
+          y: curr.y,
+          state: curr.state,
+        });
+      }
+
+      return prev;
+    }, []);
+    // return this.field.cells.map((row) => row.map((cell) => cell.state));
   }
 
   private _changeActualSocketId(newId: string | null) {
